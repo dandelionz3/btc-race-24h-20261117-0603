@@ -5,7 +5,20 @@
 // node cli/makefun.mjs grade-local --kit . --bot /home/hatch/workspace/makefun/btc-race-24h-20261117-0603-entry --driver process
 import { runBars, type BarsState, type BuyInput, type SellInput } from './vendor/makefun-bars.ts';
 
-const closes: number[] = [];
+const MAX_CLOSES = 600;
+const LOOKBACK_BARS = 61;
+const ENTRY_DIP_BPS = -120;
+const TAKE_PROFIT_BPS = 200;
+const STOP_LOSS_BPS = -100;
+const TIME_STOP_BARS = 720;
+const COOLDOWN_BARS = 240;
+const MIN_CASH_UNITS = 1000000n;
+const MAX_SLIPPAGE_BPS = 100;
+const ZERO_QUANTITY = 0n;
+const UNCHANGED_PRICE_RATIO = 1;
+const BASIS_POINTS_PER_UNIT = 10000;
+
+const recentCloses: number[] = [];
 let entryClose: number | undefined;
 let entryBar: number | undefined;
 let saleBar: number | undefined;
@@ -17,40 +30,40 @@ await runBars({
     if (!bar) return [];
 
     const close = Number(bar.c);
-    closes.push(close);
-    if (closes.length > 600) closes.shift();
+    recentCloses.push(close);
+    if (recentCloses.length > MAX_CLOSES) recentCloses.shift();
 
-    const qty = state.positions.get('CBBTC')?.qty ?? 0n;
-    if (qty > 0n) {
+    const qty = state.positions.get('CBBTC')?.qty ?? ZERO_QUANTITY;
+    if (qty > ZERO_QUANTITY) {
       if (entryClose === undefined || entryBar === undefined) {
         entryClose = close;
         entryBar = state.seq;
       }
-      const pnlBps = (close / entryClose - 1) * 10000;
+      const pnlBps = (close / entryClose - UNCHANGED_PRICE_RATIO) * BASIS_POINTS_PER_UNIT;
       const age = state.seq - entryBar;
-      if (pnlBps >= 200 || pnlBps <= -100 || age >= 720) {
+      if (pnlBps >= TAKE_PROFIT_BPS || pnlBps <= STOP_LOSS_BPS || age >= TIME_STOP_BARS) {
         saleBar = state.seq;
         entryClose = undefined;
         entryBar = undefined;
-        return [{ side: 'sell', symbol: 'CBBTC', qty, max_slippage_bps: 100 }];
+        return [{ side: 'sell', symbol: 'CBBTC', qty, max_slippage_bps: MAX_SLIPPAGE_BPS }];
       }
       return [];
     }
 
     entryClose = undefined;
     entryBar = undefined;
-    if (closes.length < 61 || state.cash < 1_000_000n) return [];
-    if (saleBar !== undefined && state.seq - saleBar < 240) return [];
+    if (!(recentCloses.length >= LOOKBACK_BARS) || state.cash < MIN_CASH_UNITS) return [];
+    if (saleBar !== undefined && state.seq - saleBar < COOLDOWN_BARS) return [];
 
-    const rocBps = (close / closes[closes.length - 61] - 1) * 10000;
-    if (rocBps <= -120) {
+    const rocBps = (close / recentCloses[recentCloses.length - LOOKBACK_BARS] - UNCHANGED_PRICE_RATIO) * BASIS_POINTS_PER_UNIT;
+    if (rocBps <= ENTRY_DIP_BPS) {
       entryClose = close;
       entryBar = state.seq;
       return [{
         side: 'buy',
         symbol: 'CBBTC',
         notional_quote_units: state.cash,
-        max_slippage_bps: 100,
+        max_slippage_bps: MAX_SLIPPAGE_BPS,
       }];
     }
     return [];
