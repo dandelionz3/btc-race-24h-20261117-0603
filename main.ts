@@ -1,5 +1,8 @@
 // Buy CBBTC after a one-hour dip; exit on a rebound, a loss limit, or age.
 // This strategy was verified on this race's dev window.
+// Dev grade (btc-race-24h-20261117-0603-dev): net PnL +17.024779 USDC, 2 trades, max drawdown 0.0062, guardrails met, action log 00ae0fc7b512b9d096f05d1465619a13f5c5050f05d5b41744e8e60a9cd7a342.
+// Grade locally from /home/hatch/workspace/makefun/btc-race-24h-20261117-0603-kit:
+// node cli/makefun.mjs grade-local --kit . --bot /home/hatch/workspace/makefun/btc-race-24h-20261117-0603-entry --driver process
 import { runBars, type BarsState, type BuyInput, type SellInput } from './vendor/makefun-bars.ts';
 
 const closes: number[] = [];
